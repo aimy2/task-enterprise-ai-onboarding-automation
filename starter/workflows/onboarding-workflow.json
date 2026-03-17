@@ -1,0 +1,323 @@
+{
+	"name": "AI Onboarding Automation Scaffold",
+	"nodes": [
+		{
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "new-hire-intake",
+				"responseMode": "onReceived"
+			},
+			"id": "1",
+			"name": "Form Trigger",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 1,
+			"position": [
+				260,
+				300
+			]
+		},
+		{
+			"parameters": {
+				"keepOnlySet": true,
+				"values": {
+					"string": [
+						{
+							"name": "onboarding_id",
+							"value": "={{$json.onboarding_id || $now.toISO()}}"
+						},
+						{
+							"name": "full_name",
+							"value": "={{$json.full_name}}"
+						},
+						{
+							"name": "job_title",
+							"value": "={{$json.job_title}}"
+						},
+						{
+							"name": "department",
+							"value": "={{$json.department}}"
+						},
+						{
+							"name": "location",
+							"value": "={{$json.location}}"
+						},
+						{
+							"name": "manager_name",
+							"value": "={{$json.manager_name}}"
+						},
+						{
+							"name": "employment_type",
+							"value": "={{$json.employment_type}}"
+						},
+						{
+							"name": "start_date",
+							"value": "={{$json.start_date}}"
+						}
+					],
+					"json": [
+						{
+							"name": "documents",
+							"value": "={{$json.documents || []}}"
+						}
+					]
+				}
+			},
+			"id": "2",
+			"name": "Normalize Intake",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 2,
+			"position": [
+				500,
+				300
+			]
+		},
+		{
+			"parameters": {
+				"url": "https://api.openai.com/v1/responses",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Authorization",
+							"value": "=Bearer {{$env.OPENAI_API_KEY}}"
+						},
+						{
+							"name": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				},
+				"sendBody": true,
+				"jsonParameters": true,
+				"options": {},
+				"bodyParametersJson": "={\n  \"model\": \"gpt-4o-mini\",\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an onboarding operations assistant. Return JSON only.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Extract onboarding fields from this payload: {{$json}}\"\n    }\n  ]\n}"
+			},
+			"id": "3",
+			"name": "AI Extract & Validate",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4,
+			"position": [
+				760,
+				300
+			]
+		},
+		{
+			"parameters": {
+				"conditions": {
+					"string": [
+						{
+							"value1": "={{$json.output[0].content[0].text || ''}}",
+							"operation": "contains",
+							"value2": "issues_for_hr_review"
+						}
+					]
+				}
+			},
+			"id": "4",
+			"name": "Quality Gate",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 1,
+			"position": [
+				1010,
+				300
+			]
+		},
+		{
+			"parameters": {
+				"keepOnlySet": true,
+				"values": {
+					"string": [
+						{
+							"name": "status",
+							"value": "manual_review_required"
+						},
+						{
+							"name": "owner",
+							"value": "HR"
+						}
+					]
+				}
+			},
+			"id": "5",
+			"name": "Flag for HR Review",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 2,
+			"position": [
+				1250,
+				200
+			]
+		},
+		{
+			"parameters": {
+				"keepOnlySet": true,
+				"values": {
+					"string": [
+						{
+							"name": "status",
+							"value": "validated"
+						},
+						{
+							"name": "next_step",
+							"value": "task_routing"
+						}
+					]
+				}
+			},
+			"id": "6",
+			"name": "Create Structured Profile",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 2,
+			"position": [
+				1250,
+				380
+			]
+		},
+		{
+			"parameters": {
+				"jsCode": "const employee = $input.first().json;\nconst hrTasks = [\n  { task: 'Confirm legal docs complete', owner: 'HR' },\n  { task: 'Send policy acknowledgements', owner: 'HR' }\n];\nconst itTasks = [\n  { task: 'Provision email and SSO account', owner: 'IT' },\n  { task: 'Assign baseline application access', owner: 'IT' }\n];\nconst managerTasks = [\n  { task: 'Prepare first-week goals', owner: 'Manager' },\n  { task: 'Schedule intro meetings', owner: 'Manager' }\n];\nreturn [{ json: { ...employee, tasks: [...hrTasks, ...itTasks, ...managerTasks] } }];"
+			},
+			"id": "7",
+			"name": "Generate & Route Tasks",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [
+				1490,
+				380
+			]
+		},
+		{
+			"parameters": {
+				"jsCode": "const data = $input.first().json;\nconst plan = {\n  welcome_summary: `Welcome ${data.full_name || 'new hire'} to the ${data.department || 'team'} team.`,\n  first_week: [\n    'Day 1 orientation and account setup',\n    'Day 2-3 core systems onboarding',\n    'Day 4-5 team integration and role priorities'\n  ]\n};\nreturn [{ json: { ...data, onboarding_plan: plan } }];"
+			},
+			"id": "8",
+			"name": "Generate Personalized Plan",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [
+				1730,
+				380
+			]
+		},
+		{
+			"parameters": {
+				"keepOnlySet": true,
+				"values": {
+					"string": [
+						{
+							"name": "status",
+							"value": "in_progress"
+						},
+						{
+							"name": "milestones",
+							"value": "day1,day7,day30"
+						}
+					]
+				}
+			},
+			"id": "9",
+			"name": "Update Onboarding Status",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 2,
+			"position": [
+				1980,
+				380
+			]
+		}
+	],
+	"connections": {
+		"Form Trigger": {
+			"main": [
+				[
+					{
+						"node": "Normalize Intake",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Normalize Intake": {
+			"main": [
+				[
+					{
+						"node": "AI Extract & Validate",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"AI Extract & Validate": {
+			"main": [
+				[
+					{
+						"node": "Quality Gate",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Quality Gate": {
+			"main": [
+				[
+					{
+						"node": "Flag for HR Review",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Create Structured Profile",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Create Structured Profile": {
+			"main": [
+				[
+					{
+						"node": "Generate & Route Tasks",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Generate & Route Tasks": {
+			"main": [
+				[
+					{
+						"node": "Generate Personalized Plan",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Generate Personalized Plan": {
+			"main": [
+				[
+					{
+						"node": "Update Onboarding Status",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"pinData": {},
+	"active": false,
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"versionId": "1",
+	"meta": {
+		"templateCredsSetupCompleted": false
+	},
+	"id": "ai-onboarding-scaffold"
+}
